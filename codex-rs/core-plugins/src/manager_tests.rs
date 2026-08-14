@@ -5882,7 +5882,7 @@ plugins = true
 }
 
 #[test]
-fn refresh_curated_plugin_cache_replaces_existing_local_version_with_short_sha_version() {
+fn refresh_curated_plugin_cache_retains_local_version_and_activates_short_sha_version() {
     let tmp = tempfile::tempdir().unwrap();
     let curated_root = curated_plugins_repo_path(tmp.path());
     write_openai_curated_marketplace(&curated_root, &["slack"]);
@@ -5899,14 +5899,18 @@ fn refresh_curated_plugin_cache_replaces_existing_local_version_with_short_sha_v
     );
 
     assert!(
-        refresh_curated_plugin_cache(tmp.path(), TEST_CURATED_PLUGIN_SHA, &[plugin_id])
-            .expect("cache refresh should succeed")
+        refresh_curated_plugin_cache(
+            tmp.path(),
+            TEST_CURATED_PLUGIN_SHA,
+            std::slice::from_ref(&plugin_id),
+        )
+        .expect("cache refresh should succeed")
     );
 
     assert!(
-        !tmp.path()
+        tmp.path()
             .join("plugins/cache/openai-curated/slack/local")
-            .exists()
+            .is_dir()
     );
     assert!(
         tmp.path()
@@ -5914,6 +5918,10 @@ fn refresh_curated_plugin_cache_replaces_existing_local_version_with_short_sha_v
                 "plugins/cache/openai-curated/slack/{TEST_CURATED_PLUGIN_CACHE_VERSION}"
             ))
             .is_dir()
+    );
+    assert_eq!(
+        PluginStore::new(tmp.path().to_path_buf()).active_plugin_version(&plugin_id),
+        Some(TEST_CURATED_PLUGIN_CACHE_VERSION.to_string())
     );
 }
 
@@ -6086,7 +6094,7 @@ fn refresh_curated_plugin_cache_returns_false_when_configured_plugins_are_curren
 }
 
 #[test]
-fn refresh_curated_plugin_cache_migrates_full_sha_cache_version_to_short_version() {
+fn refresh_curated_plugin_cache_retains_full_sha_and_activates_short_sha_version() {
     let tmp = tempfile::tempdir().unwrap();
     let curated_root = curated_plugins_repo_path(tmp.path());
     write_openai_curated_marketplace(&curated_root, &["slack"]);
@@ -6102,15 +6110,19 @@ fn refresh_curated_plugin_cache_migrates_full_sha_cache_version_to_short_version
     );
 
     assert!(
-        refresh_curated_plugin_cache(tmp.path(), TEST_CURATED_PLUGIN_SHA, &[plugin_id])
-            .expect("cache refresh should migrate the full sha cache version")
+        refresh_curated_plugin_cache(
+            tmp.path(),
+            TEST_CURATED_PLUGIN_SHA,
+            std::slice::from_ref(&plugin_id),
+        )
+        .expect("cache refresh should migrate the full sha cache version")
     );
     assert!(
-        !tmp.path()
+        tmp.path()
             .join(format!(
                 "plugins/cache/openai-curated/slack/{TEST_CURATED_PLUGIN_SHA}"
             ))
-            .exists()
+            .is_dir()
     );
     assert!(
         tmp.path()
@@ -6119,10 +6131,14 @@ fn refresh_curated_plugin_cache_migrates_full_sha_cache_version_to_short_version
             ))
             .is_dir()
     );
+    assert_eq!(
+        PluginStore::new(tmp.path().to_path_buf()).active_plugin_version(&plugin_id),
+        Some(TEST_CURATED_PLUGIN_CACHE_VERSION.to_string())
+    );
 }
 
 #[test]
-fn refresh_non_curated_plugin_cache_replaces_existing_local_version_with_manifest_version() {
+fn refresh_non_curated_plugin_cache_retains_local_version_and_activates_manifest_version() {
     let tmp = tempfile::tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     fs::create_dir_all(repo_root.join(".git")).unwrap();
@@ -6168,14 +6184,19 @@ enabled = true
     );
 
     assert!(
-        !tmp.path()
+        tmp.path()
             .join("plugins/cache/debug/sample-plugin/local")
-            .exists()
+            .is_dir()
     );
     assert!(
         tmp.path()
             .join("plugins/cache/debug/sample-plugin/1.2.3")
             .is_dir()
+    );
+    let plugin_id = PluginId::new("sample-plugin".to_string(), "debug".to_string()).unwrap();
+    assert_eq!(
+        PluginStore::new(tmp.path().to_path_buf()).active_plugin_version(&plugin_id),
+        Some("1.2.3".to_string())
     );
 }
 
