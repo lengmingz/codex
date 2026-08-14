@@ -554,18 +554,19 @@ fn active_plugin_version_compares_semver_versions_semantically() {
 }
 
 #[test]
-fn install_with_new_version_keeps_existing_plugin_root_and_prunes_old_versions() {
+fn install_with_new_version_keeps_superseded_skill_paths_readable() {
     let tmp = tempdir().unwrap();
     let store = PluginStore::new(tmp.path().to_path_buf());
     let plugin_id = PluginId::new("sample-plugin".to_string(), "debug".to_string()).unwrap();
 
     write_plugin_with_version(tmp.path(), "v1", "sample-plugin", Some("1.0.0"));
-    store
+    let first_install = store
         .install(
             AbsolutePathBuf::try_from(tmp.path().join("v1")).unwrap(),
             plugin_id.clone(),
         )
         .unwrap();
+    let superseded_skill_path = first_install.installed_path.join("skills/SKILL.md");
 
     write_plugin_with_version(tmp.path(), "v2", "sample-plugin", Some("2.0.0"));
     store
@@ -584,21 +585,67 @@ fn install_with_new_version_keeps_existing_plugin_root_and_prunes_old_versions()
             .join("plugins/cache/debug/sample-plugin/2.0.0")
             .is_dir()
     );
-    assert!(
-        !tmp.path()
-            .join("plugins/cache/debug/sample-plugin/1.0.0")
-            .exists()
+    assert!(superseded_skill_path.is_file());
+}
+
+#[test]
+fn install_with_new_version_marks_it_active_when_local_is_retained() {
+    let tmp = tempdir().unwrap();
+    let store = PluginStore::new(tmp.path().to_path_buf());
+    let plugin_id = PluginId::new("sample-plugin".to_string(), "debug".to_string()).unwrap();
+
+    write_plugin_with_version(tmp.path(), "local", "sample-plugin", None);
+    store
+        .install(
+            AbsolutePathBuf::try_from(tmp.path().join("local")).unwrap(),
+            plugin_id.clone(),
+        )
+        .unwrap();
+
+    write_plugin_with_version(tmp.path(), "versioned", "sample-plugin", Some("2.0.0"));
+    store
+        .install(
+            AbsolutePathBuf::try_from(tmp.path().join("versioned")).unwrap(),
+            plugin_id.clone(),
+        )
+        .unwrap();
+
+    assert_eq!(
+        store.active_plugin_version(&plugin_id),
+        Some("2.0.0".to_string())
     );
 }
 
 #[test]
-fn old_plugin_version_would_stay_active_for_local_or_later_versions() {
-    assert!(old_plugin_version_would_stay_active(
-        DEFAULT_PLUGIN_VERSION,
-        "1.0.0"
-    ));
-    assert!(old_plugin_version_would_stay_active("10.0.0", "9.0.0"));
-    assert!(!old_plugin_version_would_stay_active("1.0.0", "2.0.0"));
+fn reinstall_active_version_keeps_superseded_skill_paths_readable() {
+    let tmp = tempdir().unwrap();
+    let store = PluginStore::new(tmp.path().to_path_buf());
+    let plugin_id = PluginId::new("sample-plugin".to_string(), "debug".to_string()).unwrap();
+
+    write_plugin_with_version(tmp.path(), "v1", "sample-plugin", Some("1.0.0"));
+    let first_install = store
+        .install(
+            AbsolutePathBuf::try_from(tmp.path().join("v1")).unwrap(),
+            plugin_id.clone(),
+        )
+        .unwrap();
+    let superseded_skill_path = first_install.installed_path.join("skills/SKILL.md");
+
+    write_plugin_with_version(tmp.path(), "v2", "sample-plugin", Some("2.0.0"));
+    store
+        .install(
+            AbsolutePathBuf::try_from(tmp.path().join("v2")).unwrap(),
+            plugin_id.clone(),
+        )
+        .unwrap();
+    store
+        .install(
+            AbsolutePathBuf::try_from(tmp.path().join("v2")).unwrap(),
+            plugin_id,
+        )
+        .unwrap();
+
+    assert!(superseded_skill_path.is_file());
 }
 
 #[test]
